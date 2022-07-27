@@ -7,17 +7,19 @@ export class Pos {
         this.y = y;
     }
 
-    [Symbol.iterator]() {
-        let i = 0;
-        let that = this;
-        return {
-            next: () => {
-                if (i == 0) {
-                    return { that.x, done }
-                } else {
-                    { value: that.x, done: true }
-                }
-            }
-        }
-    }
+    // [Symbol.iterator]() {
+    //     let i = 0;
+    //     let that = this;
+    //     let done = false;
+    //     return {
+    //         next: () => {
+    //             if (i == 0) {
+    //                 i++;
+    //                 return { value: that.x, done }
+    //             } else {
+    //                 { value: that.y, done }
+    //             }
+    //         }
+    //     }
+    // }
 }

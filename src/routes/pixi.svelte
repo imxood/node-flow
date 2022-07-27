@@ -1,26 +1,9 @@
 <script lang="ts">
-    import { onMount } from "svelte";
-    import * as PIXI from "pixi.js";
-
-    import { EventSystem } from "@pixi/events";
-    import { Pos } from "$lib/pos";
+    import { onMount, tick } from "svelte";
+    import { Grid } from "$lib/grid/grid";
 
     let canvas: HTMLCanvasElement;
-    let app: PIXI.Application;
-    let transform = new PIXI.Matrix();
-
-    let zoom_factor = 1.0;
-
-    let axis_unit_size = 100.0;
-    let axis_font_size = 8;
-    let axis_mark_size = 3;
-
-    let axis_font_style = new PIXI.TextStyle({
-        fontFamily: "Arial",
-        fontSize: axis_font_size,
-        fontStyle: "italic",
-        stroke: "#4a1850",
-    });
+    let grid: Grid;
 
     function canvas_contextmenu(e: Event) {}
 
@@ -58,155 +41,9 @@
     }
 
     onMount(() => {
-        PIXI.extensions.remove(PIXI.InteractionManager);
-
-        app = new PIXI.Application({
-            antialias: true,
-            backgroundColor: 0xffffff,
-            view: canvas,
-        });
-
-        const { renderer, stage } = app;
-
-        renderer.addSystem(EventSystem, "events");
-
-        document.addEventListener("pointermove", (e: PointerEvent) => {
-            if (e.target == canvas && e.buttons) {
-                if (e.buttons == 1) {
-                    console.log("move, left key pressed");
-                } else if (e.buttons == 2) {
-                    console.log("move, right key pressed");
-                } else if (e.buttons == 4) {
-                    console.log("move, middle key pressed");
-                }
-            }
-        });
-
-        document.addEventListener(
-            "wheel",
-            (e: WheelEvent) => {
-                e.preventDefault();
-                if (e.target == canvas) {
-                    if (e.ctrlKey) {
-                        console.log(`ctrlKey pressed, e.deltaY: ${e.deltaY}`);
-                    }
-                    if (e.altKey) {
-                        console.log(`altKey pressed, e.deltaY: ${e.deltaY}`);
-                    }
-                }
-            },
-            {
-                passive: false,
-            }
-        );
-
-        /* 
-            画图形
-        */
-
-        let unit = 10; // px
-
-        const graphics = new PIXI.Graphics();
-
-        function drawGridLines() {
-            stage.removeChild();
-
-            // 设置样式
-            graphics.lineStyle(1, 0x8a919f, 1);
-
-            // axis
-            let axis_eles = new PIXI.Container();
-
-            // x axis
-            let tmp_hor = Math.ceil(
-                (renderer.width - axis_font_size - axis_mark_size) /
-                    axis_unit_size
-            );
-
-            let start_pos = new Pos(
-                axis_font_size + axis_mark_size,
-                axis_font_size + axis_mark_size
-            );
-
-            graphics.moveTo(...start_pos);
-            graphics.lineTo(renderer.width, axis_font_size + axis_mark_size);
-
-            // x axis
-            for (var i = 0; i <= tmp_hor; i++) {
-                var base = axis_font_size + axis_mark_size + i * axis_unit_size;
-                const text = new PIXI.Text(
-                    `${i * axis_unit_size}`,
-                    axis_font_style
-                );
-                text.x = base - text.width / 2.0;
-                text.y = 0;
-                axis_eles.addChild(text);
-
-                let small_unit = axis_unit_size / 10;
-                for (var j = 0; j <= 10; j++) {
-                    var v = base + small_unit * j;
-                    if (j == 5) {
-                        graphics.moveTo(v, axis_font_size - axis_mark_size);
-                        graphics.lineTo(v, axis_font_size + axis_mark_size);
-                    } else {
-                        graphics.moveTo(v, axis_font_size);
-                        graphics.lineTo(v, axis_font_size + axis_mark_size);
-                    }
-                }
-            }
-
-            // y axis
-            let tmp_ver = Math.ceil(
-                (renderer.height - axis_font_size - axis_mark_size) /
-                    axis_unit_size
-            );
-
-            graphics.moveTo(
-                axis_font_size + axis_mark_size,
-                axis_font_size + axis_mark_size
-            );
-            graphics.lineTo(axis_font_size + axis_mark_size, renderer.height);
-
-            for (var i = 0; i <= tmp_ver; i++) {
-                var base = axis_font_size + axis_mark_size + i * axis_unit_size;
-                const text = new PIXI.Text(
-                    `${i * axis_unit_size}`,
-                    axis_font_style
-                );
-                text.x = axis_font_size / 2;
-                text.y = base;
-                text.anchor.set(0.5, 0.5);
-                text.rotation = -PIXI.PI_2 / 4;
-                axis_eles.addChild(text);
-
-                let small_unit = axis_unit_size / 10;
-                for (var j = 0; j <= 10; j++) {
-                    var v = base + small_unit * j;
-                    if (j == 5) {
-                        graphics.moveTo(axis_font_size - axis_mark_size, v);
-                        graphics.lineTo(axis_font_size + axis_mark_size, v);
-                    } else {
-                        graphics.moveTo(axis_font_size, v);
-                        graphics.lineTo(axis_font_size + axis_mark_size, v);
-                    }
-                }
-            }
-
-            stage.addChild(graphics);
-            stage.addChild(axis_eles);
-        }
-
-        drawGridLines();
-
-        PIXI.Ticker.shared.add((delta) => {
-            // console.log("delta", delta);
-            // basicText.text = `delta ${delta.toFixed(6)}`;
-        });
-
-        console.log(
-            "PIXI.Ticker.shared.autoStart",
-            PIXI.Ticker.shared.autoStart
-        );
+        grid = new Grid(canvas);
+        grid.init();
+        grid.redraw();
     });
 </script>
 
