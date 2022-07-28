@@ -96,23 +96,22 @@ export class Grid {
         stage.interactive = true;
         stage.hitArea = renderer.screen;
 
-        stage.addEventListener("pointerdown", (ev: Event) => {
-            let e = ev as PointerEvent;
-            console.log(e.pageX, e.pageY);
-            console.log(e);
+        stage.on("pointerdown", (e: PointerEvent) => {
+            this.start_point.set(e.clientX, e.clientY);
             // this.start_point.set(ev);
         });
 
-        document.addEventListener("pointermove", (e: PointerEvent) => {
-            if (e.target == this.canvas && e.buttons) {
-                if (e.buttons == 1) {
-                    console.log("move, left key pressed");
-                } else if (e.buttons == 2) {
-                    console.log("move, right key pressed");
-                    // this.transform.translate();
-                } else if (e.buttons == 4) {
-                    console.log("move, middle key pressed");
-                }
+        stage.on("pointermove", (e: PointerEvent) => {
+            if (e.buttons == 1) {
+                console.log("move, left key pressed");
+            } else if (e.buttons == 2) {
+                this.transform.translate(e.clientX - this.start_point.x, e.clientY - this.start_point.y);
+                this.start_point = new Point(e.clientX, e.clientY);
+                console.log("move, right key pressed", this.transform, this);
+                this.redraw();
+                // this.transform.translate();
+            } else if (e.buttons == 4) {
+                console.log("move, middle key pressed");
             }
         });
 
@@ -151,17 +150,21 @@ export class Grid {
 
         graphics.removeChild();
 
+        graphics.beginFill(0xFFFFFF);
+        graphics.drawRect(0, 0, renderer.width, renderer.height);
+        graphics.endFill();
+
         let { axis_font_size, axis_mark_size, axis_unit_size } = this.settings;
 
-        let start_pos = new Point(
+        let start_pos = this.transform.apply(new Point(
             axis_font_size + axis_mark_size,
             axis_font_size + axis_mark_size
-        );
+        ));
 
-        let end_pos = new Point(
+        let end_pos = this.transform.apply(new Point(
             renderer.width,
             axis_font_size + axis_mark_size
-        );
+        ));
 
         graphics.moveTo(start_pos.x, start_pos.y);
         graphics.lineTo(end_pos.x, end_pos.y);
@@ -199,13 +202,19 @@ export class Grid {
             let small_unit = axis_unit_size / 10;
             for (var j = 0; j <= 10; j++) {
                 var v = base + small_unit * j;
-                if (j == 5) {
+                if (j == 10) {
+                    start_pos = this.transform.apply(new Point(v, axis_font_size - axis_mark_size));
                     /* 画垂直于水平轴的网格线 */
-                    graphics.moveTo(v, axis_font_size - axis_mark_size);
-                    graphics.lineTo(v, renderer.height);
+                    graphics.moveTo(start_pos.x, start_pos.y);
+
+                    end_pos = this.transform.apply(new Point(v, renderer.height));
+                    graphics.lineTo(end_pos.x, end_pos.y);
                 } else {
-                    graphics.moveTo(v, axis_font_size);
-                    graphics.lineTo(v, axis_font_size + axis_mark_size);
+                    start_pos = this.transform.apply(new Point(v, axis_font_size));
+                    graphics.moveTo(start_pos.x, start_pos.y);
+
+                    end_pos = this.transform.apply(new Point(v, axis_font_size + axis_mark_size));
+                    graphics.lineTo(end_pos.x, end_pos.y);
                 }
             }
 
@@ -217,11 +226,11 @@ export class Grid {
             axis_unit_size
         );
 
-        graphics.moveTo(
-            axis_font_size + axis_mark_size,
-            axis_font_size + axis_mark_size
-        );
-        graphics.lineTo(axis_font_size + axis_mark_size, renderer.height);
+        start_pos = new Point(axis_font_size + axis_mark_size, axis_font_size + axis_mark_size);
+        graphics.moveTo(start_pos.x, start_pos.y);
+
+        end_pos = new Point(axis_font_size + axis_mark_size, renderer.height);
+        graphics.lineTo(end_pos.x, end_pos.y);
 
         for (var i = 0; i <= tmp_ver; i++) {
             var base = axis_font_size + axis_mark_size + i * axis_unit_size;
@@ -238,13 +247,19 @@ export class Grid {
             let small_unit = axis_unit_size / 10;
             for (var j = 0; j <= 10; j++) {
                 var v = base + small_unit * j;
-                if (j == 5) {
+                if (j == 10) {
                     /* 画垂直于垂直轴的网格线 */
-                    graphics.moveTo(axis_font_size - axis_mark_size, v);
-                    graphics.lineTo(renderer.width, v);
+                    start_pos = this.transform.apply(new Point(axis_font_size - axis_mark_size, v));
+                    graphics.moveTo(start_pos.x, start_pos.y);
+
+                    end_pos = this.transform.apply(new Point(renderer.width, v));
+                    graphics.lineTo(end_pos.x, end_pos.y);
                 } else {
-                    graphics.moveTo(axis_font_size, v);
-                    graphics.lineTo(axis_font_size + axis_mark_size, v);
+                    start_pos = this.transform.apply(new Point(axis_font_size, v));
+                    graphics.moveTo(start_pos.x, start_pos.y);
+
+                    end_pos = this.transform.apply(new Point(axis_font_size + axis_mark_size, v));
+                    graphics.lineTo(end_pos.x, end_pos.y);
                 }
             }
         }
