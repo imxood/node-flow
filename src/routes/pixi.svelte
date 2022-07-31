@@ -47,7 +47,7 @@
     });
 </script>
 
-<canvas bind:this={canvas} width={500} height={350} />
+<canvas bind:this={canvas} width={1000} height={700} />
 
 <svelte:window on:contextmenu|preventDefault={canvas_contextmenu} />
 

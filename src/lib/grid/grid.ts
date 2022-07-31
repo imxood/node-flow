@@ -1,4 +1,4 @@
-import { EventSystem } from "@pixi/events";
+import { EventSystem, FederatedPointerEvent, FederatedWheelEvent } from "@pixi/events";
 import * as PIXI from "pixi.js";
 import { Application, Graphics, Matrix, Point } from "pixi.js";
 
@@ -43,25 +43,34 @@ export class Settings {
     }
 
     is_changed() {
-        let changed = this._changed;
-        if (changed) {
-            this._changed = false;
-        }
-        return changed;
+        return this._changed;
+    }
+
+    clear_changed() {
+        this._changed = false;
     }
 }
 
 export class Grid {
     canvas: HTMLCanvasElement;
     app: Application;
-    graphics: Graphics;
+    grid_lines: Graphics;
+    axises: Graphics;
     settings: Settings;
     transform: Matrix;
     start_point: Point;
 
+    private changed: boolean;
     private zoom_factor: number;
 
     constructor(canvas: HTMLCanvasElement) {
+
+        document.addEventListener('wheel', e => {
+            e.preventDefault();
+        }, { passive: false });
+
+        // 给 pixi.js chrome plugin 使用
+        (window as any).__PIXI_INSPECTOR_GLOBAL_HOOK__ && (window as any).__PIXI_INSPECTOR_GLOBAL_HOOK__.register({ PIXI: PIXI });
 
         PIXI.extensions.remove(PIXI.InteractionManager);
 
@@ -70,44 +79,51 @@ export class Grid {
             antialias: true,
             backgroundColor: 0xffffff,
             view: canvas,
+            width: canvas.width,
+            height: canvas.height,
         });
-        this.graphics = new Graphics();
+        this.grid_lines = new Graphics();
+        this.axises = new Graphics();
+
         this.settings = new Settings();
         this.transform = new Matrix();
         this.start_point = new Point();
 
+        this.changed = true;
         this.zoom_factor = 1.0;
 
-        this.app.stage.addChild(this.graphics);
+        this.app.stage.addChild(this.grid_lines);
+        this.app.stage.addChild(this.axises);
     }
 
-    is_changed() {
-        return this.settings.is_changed();
+    need_redraw() {
+        return this.changed && this.settings.is_changed();
     }
 
     init() {
         const { renderer, stage } = this.app;
 
         // 设置样式
-        this.graphics.lineStyle(1, 0x8a919f, 1);
+        this.grid_lines.lineStyle(1, 0x8a919f, 1);
 
         renderer.addSystem(EventSystem, "events");
 
         stage.interactive = true;
         stage.hitArea = renderer.screen;
 
-        stage.on("pointerdown", (e: PointerEvent) => {
-            this.start_point.set(e.clientX, e.clientY);
+        stage.on("pointerdown", (e: FederatedPointerEvent) => {
+            this.start_point.copyFrom(e.global);
             // this.start_point.set(ev);
         });
 
-        stage.on("pointermove", (e: PointerEvent) => {
+        stage.on("pointermove", (e: FederatedPointerEvent) => {
             if (e.buttons == 1) {
                 console.log("move, left key pressed");
             } else if (e.buttons == 2) {
                 this.transform.translate(e.clientX - this.start_point.x, e.clientY - this.start_point.y);
                 this.start_point = new Point(e.clientX, e.clientY);
-                console.log("move, right key pressed", this.transform, this);
+                // console.log("move, right key pressed", this.transform, this);
+                // console.log(`${this.app.stage.()}`);
                 this.redraw();
                 // this.transform.translate();
             } else if (e.buttons == 4) {
@@ -115,44 +131,71 @@ export class Grid {
             }
         });
 
-        document.addEventListener(
-            "wheel",
-            (e: WheelEvent) => {
-                e.preventDefault();
-                if (e.target == this.canvas) {
-                    if (e.ctrlKey) {
-                        console.log(`ctrlKey pressed, e.deltaY: ${e.deltaY}`);
-                    }
-                    if (e.altKey) {
-                        console.log(`altKey pressed, e.deltaY: ${e.deltaY}`);
-                    }
-                }
-            },
-            {
-                passive: false,
-            }
+        stage.on("wheel", (e: FederatedWheelEvent) => {
+            // if (e.ctrlKey) {
+            //     console.log(`ctrlKey pressed, e.deltaY: ${e.deltaY}, ${this.transform}`);
+            // }
+            // if (e.altKey) {
+            //     console.log(`altKey pressed, e.deltaY: ${e.deltaY}`);
+            // }
+
+            /* 
+                中键 旋转一次, 根据当前点击的stage坐标 focus_point, 计算出在 transform后的位置 pos0
+            */
+            let focus_point = e.global;
+            console.log(focus_point);
+
+            // 新的transform
+            this.transform.scale(
+                1 - e.deltaY * 0.001, 1 - e.deltaY * 0.001
+            );
+
+            let pos0 = this.transform.apply(focus_point);
+
+            // // // 应用新的transform后的点的位置
+            // let pos1 = this.transform.apply(focus_point);
+
+            // 计算新旧位置的距离
+            // let dist = new Point(focus_point.x - pos0.x, focus_point.y - pos0.y);
+            // // // 全局下的距离
+            // // let global_dist = this.transform.applyInverse(dist);
+
+            // this.transform.translate(dist.x, dist.y);
+
+            this.redraw();
+        }
         );
 
         PIXI.Ticker.shared.add((delta) => {
-            if (this.is_changed()) {
+            if (this.need_redraw()) {
                 this.redraw();
             }
         });
-    }
 
-    redraw() {
         this.drawGridLines();
     }
 
+    redraw() {
+        this.changed = false;
+        this.settings.clear_changed();
+        this.updateGridLines();
+        // console.log(`${this.transform}`);
+    }
+
+    private updateGridLines() {
+        this.grid_lines.transform.setFromMatrix(this.transform);
+    }
+
     private drawGridLines() {
-        let { renderer, stage } = this.app;
-        let graphics = this.graphics;
+        let renderer = this.app.renderer;
+        let { axises, grid_lines } = this;
 
-        graphics.removeChild();
+        axises.removeChildren();
+        grid_lines.removeChildren();
 
-        graphics.beginFill(0xFFFFFF);
-        graphics.drawRect(0, 0, renderer.width, renderer.height);
-        graphics.endFill();
+        grid_lines.beginFill(0xFFFFFF);
+        grid_lines.drawRect(0, 0, renderer.width, renderer.height);
+        grid_lines.endFill();
 
         let { axis_font_size, axis_mark_size, axis_unit_size } = this.settings;
 
@@ -166,11 +209,8 @@ export class Grid {
             axis_font_size + axis_mark_size
         ));
 
-        graphics.moveTo(start_pos.x, start_pos.y);
-        graphics.lineTo(end_pos.x, end_pos.y);
-
-        // axis
-        let axis_eles = new PIXI.Container();
+        grid_lines.moveTo(start_pos.x, start_pos.y);
+        grid_lines.lineTo(end_pos.x, end_pos.y);
 
         let axis_font_style = new PIXI.TextStyle({
             fontFamily: "Arial",
@@ -196,25 +236,26 @@ export class Grid {
             );
             text.x = base - text.width / 2.0;
             text.y = 0;
-            axis_eles.addChild(text);
+            axises.addChild(text);
 
             // 刻度的线条
             let small_unit = axis_unit_size / 10;
             for (var j = 0; j <= 10; j++) {
                 var v = base + small_unit * j;
-                if (j == 10) {
+                if (j == 0) {
                     start_pos = this.transform.apply(new Point(v, axis_font_size - axis_mark_size));
                     /* 画垂直于水平轴的网格线 */
-                    graphics.moveTo(start_pos.x, start_pos.y);
+                    grid_lines.moveTo(start_pos.x, start_pos.y);
 
                     end_pos = this.transform.apply(new Point(v, renderer.height));
-                    graphics.lineTo(end_pos.x, end_pos.y);
+                    grid_lines.lineTo(end_pos.x, end_pos.y);
+                    break;
                 } else {
                     start_pos = this.transform.apply(new Point(v, axis_font_size));
-                    graphics.moveTo(start_pos.x, start_pos.y);
+                    grid_lines.moveTo(start_pos.x, start_pos.y);
 
                     end_pos = this.transform.apply(new Point(v, axis_font_size + axis_mark_size));
-                    graphics.lineTo(end_pos.x, end_pos.y);
+                    grid_lines.lineTo(end_pos.x, end_pos.y);
                 }
             }
 
@@ -227,10 +268,10 @@ export class Grid {
         );
 
         start_pos = new Point(axis_font_size + axis_mark_size, axis_font_size + axis_mark_size);
-        graphics.moveTo(start_pos.x, start_pos.y);
+        grid_lines.moveTo(start_pos.x, start_pos.y);
 
         end_pos = new Point(axis_font_size + axis_mark_size, renderer.height);
-        graphics.lineTo(end_pos.x, end_pos.y);
+        grid_lines.lineTo(end_pos.x, end_pos.y);
 
         for (var i = 0; i <= tmp_ver; i++) {
             var base = axis_font_size + axis_mark_size + i * axis_unit_size;
@@ -242,30 +283,29 @@ export class Grid {
             text.y = base;
             text.anchor.set(0.5, 0.5);
             text.rotation = -PIXI.PI_2 / 4;
-            axis_eles.addChild(text);
+            axises.addChild(text);
 
             let small_unit = axis_unit_size / 10;
             for (var j = 0; j <= 10; j++) {
                 var v = base + small_unit * j;
-                if (j == 10) {
+                if (j == 0) {
                     /* 画垂直于垂直轴的网格线 */
                     start_pos = this.transform.apply(new Point(axis_font_size - axis_mark_size, v));
-                    graphics.moveTo(start_pos.x, start_pos.y);
+                    grid_lines.moveTo(start_pos.x, start_pos.y);
 
                     end_pos = this.transform.apply(new Point(renderer.width, v));
-                    graphics.lineTo(end_pos.x, end_pos.y);
+                    grid_lines.lineTo(end_pos.x, end_pos.y);
+                    break;
                 } else {
                     start_pos = this.transform.apply(new Point(axis_font_size, v));
-                    graphics.moveTo(start_pos.x, start_pos.y);
+                    grid_lines.moveTo(start_pos.x, start_pos.y);
 
                     end_pos = this.transform.apply(new Point(axis_font_size + axis_mark_size, v));
-                    graphics.lineTo(end_pos.x, end_pos.y);
+                    grid_lines.lineTo(end_pos.x, end_pos.y);
                 }
             }
         }
 
-        graphics.addChild(axis_eles);
+        grid_lines.closePath();
     }
 }
-
-export { };
